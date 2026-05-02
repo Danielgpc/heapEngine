@@ -1,0 +1,14 @@
+[
+  {
+    "name": "C++",
+    "extensions": [
+      "cpp",
+      "cc",
+      "cxx",
+      "c",
+      "h",
+      "hpp"
+    ],
+    "configuration": "./c_cpp_properties.json"
+  }
+]
