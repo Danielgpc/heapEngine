@@ -51,17 +51,17 @@ endif
 
 # Platform-specific paths and libraries
 ifeq ($(PLATFORM),MACOS)
-    INCLUDES = -Iinclude -I/opt/homebrew/include $(VULKAN_INCLUDE)
+    INCLUDES = -Iengine -Iinclude -Ithird_party -Ithird_party/vma -Ithird_party/fmt/include -Ithird_party/glm -I/opt/homebrew/include $(VULKAN_INCLUDE)
     LIB_PATHS = -L/opt/homebrew/lib -L$(LIB_DIR) $(VULKAN_LIB_PATH)
     LIBS_ENGINE = -lglfw -lvulkan
     LIBS_GAME = -L$(LIB_DIR) -lheap_engine -lglfw -lvulkan
 else ifeq ($(PLATFORM),LINUX)
-    INCLUDES = -Iinclude -I/usr/include $(VULKAN_INCLUDE)
+    INCLUDES = -Iengine -Iinclude -Ithird_party -Ithird_party/vma -Ithird_party/fmt/include -Ithird_party/glm -I/usr/include $(VULKAN_INCLUDE)
     LIB_PATHS = -L/usr/lib -L/usr/local/lib -L$(LIB_DIR) $(VULKAN_LIB_PATH)
     LIBS_ENGINE = -lglfw -lvulkan
     LIBS_GAME = -L$(LIB_DIR) -lheap_engine -lglfw -lvulkan
 else ifeq ($(PLATFORM),WINDOWS)
-    INCLUDES = -Iinclude -IC:/GLFW/include -IC:/VulkanSDK/*/Include $(VULKAN_INCLUDE)
+    INCLUDES = -Iengine -Iinclude -Ithird_party -Ithird_party/vma -Ithird_party/fmt/include -Ithird_party/glm -IC:/GLFW/include -IC:/VulkanSDK/*/Include $(VULKAN_INCLUDE)
     LIB_PATHS = -LC:/GLFW/lib -LC:/VulkanSDK/*/Lib -L$(LIB_DIR) $(VULKAN_LIB_PATH)
     LIBS_ENGINE = -lglfw3 -lvulkan
     LIBS_GAME = -L$(LIB_DIR) -lheap_engine -lglfw3 -lvulkan
@@ -97,7 +97,7 @@ ENGINE_SOURCES = $(wildcard $(ENGINE_DIR)/*.cpp)
 ENGINE_OBJECTS = $(patsubst $(ENGINE_DIR)/%.cpp,$(BIN_DIR)/engine_%.o,$(ENGINE_SOURCES))
 
 # Game executable
-GAME_TARGET = $(BIN_DIR)/game$(if $(filter $(PLATFORM),WINDOWS),.exe,)
+GAME_TARGET = $(BIN_DIR)/heap_engine
 GAME_SOURCES = $(wildcard $(GAME_DIR)/*.cpp)
 GAME_OBJECTS = $(patsubst $(GAME_DIR)/%.cpp,$(BIN_DIR)/game_%.o,$(GAME_SOURCES))
 

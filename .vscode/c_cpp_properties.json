@@ -6,16 +6,16 @@
         "${workspaceFolder}/include",
         "${workspaceFolder}/engine",
         "${workspaceFolder}/game",
+        "${workspaceFolder}/third_party",
+        "${workspaceFolder}/third_party/vma",
+        "${workspaceFolder}/third_party/fmt/include",
+        "${workspaceFolder}/third_party/glm",
         "/opt/homebrew/include",
-        "/opt/homebrew/include/SDL2",
-        "/usr/local/include",
-        "/usr/include"
+        "/opt/homebrew/opt/glfw/include",
+        "/usr/local/include"
       ],
       "defines": [
         "_DEBUG"
-      ],
-      "macFrameworkPath": [
-        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
       ],
       "compilerPath": "/usr/bin/clang++",
       "cStandard": "c17",
@@ -28,8 +28,11 @@
         "${workspaceFolder}/include",
         "${workspaceFolder}/engine",
         "${workspaceFolder}/game",
+        "${workspaceFolder}/third_party",
+        "${workspaceFolder}/third_party/vma",
+        "${workspaceFolder}/third_party/fmt/include",
+        "${workspaceFolder}/third_party/glm",
         "/usr/include",
-        "/usr/include/SDL2",
         "/usr/local/include"
       ],
       "defines": [
@@ -46,7 +49,11 @@
         "${workspaceFolder}/include",
         "${workspaceFolder}/engine",
         "${workspaceFolder}/game",
-        "C:/SDL2/include",
+        "${workspaceFolder}/third_party",
+        "${workspaceFolder}/third_party/vma",
+        "${workspaceFolder}/third_party/fmt/include",
+        "${workspaceFolder}/third_party/glm",
+        "C:/GLFW/include",
         "C:/VulkanSDK/*/Include"
       ],
       "defines": [
