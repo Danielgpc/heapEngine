@@ -5,6 +5,15 @@
 
 #include "he_types.h"
 
+// Frame data
+struct frameData
+{
+  VkCommandPool _commandPool;
+  VkCommandBuffer _mainCommandBuffer;
+};
+
+constexpr unsigned int FRAME_OVERLAP = 2;
+
 struct GLFWwindow;
 
 class HeapEngine
@@ -23,6 +32,15 @@ public:
   VkDevice _device;                          // Vulkan device for commands
   VkSurfaceKHR _surface;                     // Vulkan window surface
 
+  // Queues
+  frameData _frames[FRAME_OVERLAP];
+
+  frameData &getCurrentFrame() { return _frames[_frameNumber % FRAME_OVERLAP]; };
+
+  VkQueue _graphicsQueue;
+  uint32_t _graphicsQueueFamily;
+
+  // Swapchain init
   VkSwapchainKHR _swapchain;
   VkFormat _swapchainImageFormat;
 

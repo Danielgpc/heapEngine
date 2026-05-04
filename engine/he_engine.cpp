@@ -57,13 +57,15 @@ void HeapEngine::cleanup()
 {
   if (_isInitialized)
   {
-    if (_window)
-    {
-      glfwDestroyWindow(_window);
-      _window = nullptr;
-    }
-    glfwTerminate();
+    // make sure the gpu has stopped doing its things
+    vkDeviceWaitIdle(_device);
 
+    for (int i = 0; i < FRAME_OVERLAP; i++)
+    {
+      vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
+    }
+
+    // Destoy swapchain, surface, device, debugger and instance in correct order
     destroy_swapchain();
 
     vkDestroySurfaceKHR(_instance, _surface, nullptr);
@@ -71,6 +73,14 @@ void HeapEngine::cleanup()
 
     vkb::destroy_debug_utils_messenger(_instance, _debug_messenger);
     vkDestroyInstance(_instance, nullptr);
+
+    // Destroty GLFW window
+    if (_window)
+    {
+      glfwDestroyWindow(_window);
+      _window = nullptr;
+    }
+    glfwTerminate();
   }
 
   // clear engine pointer
@@ -150,6 +160,7 @@ void HeapEngine::init_vulkan()
     throw std::runtime_error("Failed to create window surface!");
   }
 
+  // Vulkan 1.3 features
   VkPhysicalDeviceVulkan13Features features{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
   features.dynamicRendering = true;
   features.synchronization2 = true;
@@ -178,6 +189,10 @@ void HeapEngine::init_vulkan()
   // Get the VkDevice handle used in the rest of a vulkan application
   _device = vkbDevice.device;
   _chosenGPU = physicalDevice.physical_device;
+
+  // use vkbootstrap to get a Graphics queue
+  _graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+  _graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
 }
 void HeapEngine::init_swapchain()
 {
@@ -219,7 +234,20 @@ void HeapEngine::destroy_swapchain()
 
 void HeapEngine::init_commands()
 {
-  // nothing yet
+  // create a command pool for commands submitted to the graphics queue.
+  // we also want the pool to allow for resetting of individual command buffers
+  VkCommandPoolCreateInfo commandPoolInfo = vkinit::command_pool_create_info(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+
+  for (int i = 0; i < FRAME_OVERLAP; i++)
+  {
+
+    VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));
+
+    // allocate the default command buffer that we will use for rendering
+    VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_frames[i]._commandPool, 1);
+
+    VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_frames[i]._mainCommandBuffer));
+  }
 }
 void HeapEngine::init_sync_structures()
 {
