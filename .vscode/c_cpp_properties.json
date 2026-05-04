@@ -3,7 +3,6 @@
     {
       "name": "macOS",
       "includePath": [
-        "${workspaceFolder}/include",
         "${workspaceFolder}/engine",
         "${workspaceFolder}/game",
         "${workspaceFolder}/third_party",
