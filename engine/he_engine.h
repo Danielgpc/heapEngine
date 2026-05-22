@@ -8,6 +8,9 @@
 // Frame data
 struct frameData
 {
+  VkSemaphore _swapchainSemaphore, _renderSemaphore;
+  VkFence _renderFence;
+
   VkCommandPool _commandPool;
   VkCommandBuffer _mainCommandBuffer;
 };

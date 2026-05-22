@@ -34,5 +34,6 @@
     "**/bin": true,
     "**/lib": true,
     "**/.git": true
-  }
+  },
+  "cmake.ignoreCMakeListsMissing": true
 }
