@@ -13,10 +13,13 @@
 #include <cassert>
 #include <chrono>
 #include <thread>
+
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
 //< includes
 
 //> init
-constexpr bool bUseValidaionLayers = true;
+constexpr bool bUseValidationLayers = true;
 
 HeapEngine *loadedEngine = nullptr;
 
@@ -53,7 +56,7 @@ void HeapEngine::init()
 }
 //< init
 
-//> extras
+//> cleanup
 void HeapEngine::cleanup()
 {
   if (_isInitialized)
@@ -71,14 +74,19 @@ void HeapEngine::cleanup()
       vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
       vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
       vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
+
+      _frames[i]._deletionQueue.flush();
     }
+
+    // Flush the main deletion queue
+    _mainDeletionQueue.flush();
 
     for (int i = 0; i < (int)FRAME_OVERLAP; i++)
     {
       vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
     }
 
-    // Destoy swapchain, surface, device, debugger and instance in correct order
+    // Destroy swapchain, surface, device, debugger and instance in correct order
     destroy_swapchain();
 
     vkDestroySurfaceKHR(_instance, _surface, nullptr);
@@ -87,7 +95,7 @@ void HeapEngine::cleanup()
     vkb::destroy_debug_utils_messenger(_instance, _debug_messenger);
     vkDestroyInstance(_instance, nullptr);
 
-    // Destroty GLFW window
+    // Destroy GLFW window
     if (_window)
     {
       glfwDestroyWindow(_window);
@@ -99,12 +107,17 @@ void HeapEngine::cleanup()
   // clear engine pointer
   loadedEngine = nullptr;
 }
+//< cleanup
 
+//> draw things to the screen
 void HeapEngine::draw()
 {
   // wait until the gpu has finished rendering the last frame. Timeout of 1
   // second
   VK_CHECK(vkWaitForFences(_device, 1, &getCurrentFrame()._renderFence, true, 1000000000));
+
+  getCurrentFrame()._deletionQueue.flush();
+
   VK_CHECK(vkResetFences(_device, 1, &getCurrentFrame()._renderFence));
 
   // request image from the swapchain
@@ -121,23 +134,26 @@ void HeapEngine::draw()
   // begin the command buffer recording. We will use this command buffer exactly once, so we want to let vulkan know that
   VkCommandBufferBeginInfo cmdBeginInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-  // start the command buffer recording
+  _drawExtent.width = _drawImage.imageExtent.width;
+  _drawExtent.height = _drawImage.imageExtent.height;
+
   VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
-  // make the swapchain image into writeable mode before rendering
-  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+  // transition our main draw image into general layout so we can write into it
+  // we will overwrite it all so we dont care about what was the older layout
+  vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-  // make a clear-color from frame number. This will flash with a 120 frame period.
-  VkClearColorValue clearValue;
-  float flash = std::abs(std::sin(_frameNumber / 120.f));
-  clearValue = {{0.0f, 0.0f, flash, 1.0f}};
+  draw_background(cmd);
 
-  VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
+  // transition the draw image and the swapchain image into their correct transfer layouts
+  vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-  // clear image
-  vkCmdClearColorImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
-  // make the swapchain image into presentable mode
-  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+  // execute a copy from the draw image into the swapchain
+  vkutil::copy_image_to_image(cmd, _drawImage.image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
+
+  // set swapchain image layout to Present so we can show it on the screen
+  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
   // finalize the command buffer (we can no longer add commands, but it can now be executed)
   VK_CHECK(vkEndCommandBuffer(cmd));
@@ -177,7 +193,7 @@ void HeapEngine::draw()
   // increase the number of frames drawn
   _frameNumber++;
 }
-//< extras
+//< draw things to the screen
 
 //> drawloop
 void HeapEngine::run()
@@ -223,7 +239,7 @@ void HeapEngine::init_vulkan()
 
   // make the vulkan instance, with basic debug features
   auto inst_ret = builder.set_app_name("Heap engine app")
-                      .request_validation_layers(bUseValidaionLayers)
+                      .request_validation_layers(bUseValidationLayers)
                       .use_default_debug_messenger()
                       .require_api_version(1, 3, 0)
                       .set_headless(false)
@@ -279,10 +295,58 @@ void HeapEngine::init_vulkan()
   // use vkbootstrap to get a Graphics queue
   _graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
   _graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+
+  // Init the memory allocator
+  VmaAllocatorCreateInfo allocatorInfo = {};
+  allocatorInfo.physicalDevice = _chosenGPU;
+  allocatorInfo.device = _device;
+  allocatorInfo.instance = _instance;
+  allocatorInfo.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+  vmaCreateAllocator(&allocatorInfo, &_allocator);
+
+  _mainDeletionQueue.push_function([&]()
+                                   { vmaDestroyAllocator(_allocator); });
 }
 void HeapEngine::init_swapchain()
 {
   create_swapchain(_windowExtent.width, _windowExtent.height);
+
+  // draw image size will match the window
+  VkExtent3D drawImageExtent = {
+      _windowExtent.width,
+      _windowExtent.height,
+      1};
+
+  // hardcoding the draw format to 32 bit float
+  _drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+  _drawImage.imageExtent = drawImageExtent;
+
+  VkImageUsageFlags drawImageUsages{};
+  drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
+  drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+  VkImageCreateInfo rimg_info = vkinit::image_create_info(_drawImage.imageFormat, drawImageUsages, drawImageExtent);
+
+  // for the draw image, we want to allocate it from gpu local memory
+  VmaAllocationCreateInfo rimg_allocinfo = {};
+  rimg_allocinfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+  rimg_allocinfo.requiredFlags = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+  // allocate and create the image
+  vmaCreateImage(_allocator, &rimg_info, &rimg_allocinfo, &_drawImage.image, &_drawImage.allocation, nullptr);
+
+  // build a image-view for the draw image to use for rendering
+  VkImageViewCreateInfo rview_info = vkinit::imageview_create_info(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+
+  VK_CHECK(vkCreateImageView(_device, &rview_info, nullptr, &_drawImage.imageView));
+
+  // add to deletion queues
+  _mainDeletionQueue.push_function([=]()
+                                   {
+		vkDestroyImageView(_device, _drawImage.imageView, nullptr);
+		vmaDestroyImage(_allocator, _drawImage.image, _drawImage.allocation); });
 }
 
 void HeapEngine::create_swapchain(uint32_t width, uint32_t height)
@@ -339,7 +403,7 @@ void HeapEngine::init_sync_structures()
 {
   // create syncronization structures
   // one fence to control when the gpu has finished rendering the frame,
-  // and 2 semaphores to syncronize rendering with swapchain
+  // and 2 semaphores to synchronize rendering with swapchain
   // we want the fence to start signalled so we can wait on it on the first frame
   VkFenceCreateInfo fenceCreateInfo = vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
   VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::semaphore_create_info();
@@ -351,4 +415,17 @@ void HeapEngine::init_sync_structures()
     VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
     VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
   }
+}
+
+void HeapEngine::draw_background(VkCommandBuffer cmd)
+{
+  // make a clear-color from frame number. This will flash with a 120 frame period.
+  VkClearColorValue clearValue;
+  float flash = std::abs(std::sin(_frameNumber / 120.f));
+  clearValue = {{0.0f, 0.0f, flash, 1.0f}};
+
+  VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
+
+  // clear image
+  vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
 }
