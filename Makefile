@@ -89,6 +89,7 @@ ENGINE_DIR = engine
 GAME_DIR = game
 BIN_DIR = bin
 LIB_DIR = lib
+SHADERS_DIR = shaders
 
 # Engine source
 ENGINE_LIB = $(LIB_DIR)/libheap_engine$(LIB_EXT)
@@ -102,23 +103,31 @@ GAME_TARGET = $(BIN_DIR)/heap_engine
 GAME_SOURCES = $(wildcard $(GAME_DIR)/*.cpp)
 GAME_OBJECTS = $(patsubst $(GAME_DIR)/%.cpp,$(BIN_DIR)/game_%.o,$(GAME_SOURCES))
 
-# ==================== TARGETS ====================
-.PHONY: all engine game clean run help
+# Shader compilation
+GLSLANG = /Users/danielgp/VulkanSDK/1.4.350.0/macOS/bin/glslang
+SHADER_SOURCES = $(wildcard $(SHADERS_DIR)/*.comp)
+COMPILED_SHADERS = $(patsubst $(SHADERS_DIR)/%.comp,$(BIN_DIR)/%.spv,$(SHADER_SOURCES))
 
-all: engine game
+# ==================== TARGETS ====================
+.PHONY: all engine game clean run help shaders
+
+all: shaders engine game
 
 help:
 	@echo "Available targets:"
-	@echo "  make all     - Build both engine library and game executable"
+	@echo "  make all     - Build shaders, engine library and game executable"
 	@echo "  make engine  - Build engine library only"
 	@echo "  make game    - Build game executable (requires engine library)"
+	@echo "  make shaders - Compile shaders only"
 	@echo "  make run     - Build and run the game"
 	@echo "  make clean   - Remove build artifacts"
 	@echo "  make help    - Show this help message"
 	@echo ""
 	@echo "Current platform: $(PLATFORM)"
 
-engine: $(ENGINE_LIB)
+shaders: $(COMPILED_SHADERS)
+
+engine: shaders $(ENGINE_LIB)
 
 game: $(GAME_TARGET)
 
@@ -147,6 +156,11 @@ $(BIN_DIR)/game_%.o: $(GAME_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 	@echo "  Compiled: $<"
 
+$(BIN_DIR)/%.spv: $(SHADERS_DIR)/%.comp
+	@mkdir -p $(BIN_DIR)
+	$(GLSLANG) -V $< -o $@
+	@echo "  Compiled shader: $<"
+
 clean:
 	rm -rf $(BIN_DIR) $(LIB_DIR)
 	@echo "✓ Build artifacts cleaned"
@@ -173,9 +187,10 @@ info-structure:
 	@echo "=== Directory Structure ==="
 	@echo "Engine Source: $(ENGINE_DIR)/"
 	@echo "Game Source: $(GAME_DIR)/"
+	@echo "Shaders: $(SHADERS_DIR)/"
 	@echo "Build Output: $(BIN_DIR)/"
 	@echo "Libraries: $(LIB_DIR)/"
-	@echo "Headers: $(INCLUDE_DIR)/"
 	@echo ""
 	@echo "Engine Library: $(ENGINE_LIB)"
 	@echo "Game Executable: $(GAME_TARGET)"
+	@echo "Compiled Shaders: $(COMPILED_SHADERS)"

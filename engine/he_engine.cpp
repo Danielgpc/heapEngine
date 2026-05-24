@@ -66,25 +66,22 @@ void HeapEngine::cleanup()
 
     for (int i = 0; i < FRAME_OVERLAP; i++)
     {
-
-      // already written from before
       vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
 
       // destroy sync objects
       vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
-      vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
       vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
 
       _frames[i]._deletionQueue.flush();
     }
 
+    for (VkSemaphore semaphore : _renderFinishedSemaphores)
+    {
+      vkDestroySemaphore(_device, semaphore, nullptr);
+    }
+
     // Flush the main deletion queue
     _mainDeletionQueue.flush();
-
-    for (int i = 0; i < (int)FRAME_OVERLAP; i++)
-    {
-      vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
-    }
 
     // Destroy swapchain, surface, device, debugger and instance in correct order
     destroy_swapchain();
@@ -123,6 +120,9 @@ void HeapEngine::draw()
   // request image from the swapchain
   uint32_t swapchainImageIndex;
   VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, getCurrentFrame()._swapchainSemaphore, nullptr, &swapchainImageIndex));
+
+  VkSemaphore imageAvailableSemaphore = getCurrentFrame()._swapchainSemaphore;
+  VkSemaphore renderFinishedSemaphore = _renderFinishedSemaphores[swapchainImageIndex];
 
   // naming it cmd for shorter writing
   VkCommandBuffer cmd = getCurrentFrame()._mainCommandBuffer;
@@ -164,8 +164,8 @@ void HeapEngine::draw()
 
   VkCommandBufferSubmitInfo cmdinfo = vkinit::command_buffer_submit_info(cmd);
 
-  VkSemaphoreSubmitInfo waitInfo = vkinit::semaphore_submit_info(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, getCurrentFrame()._swapchainSemaphore);
-  VkSemaphoreSubmitInfo signalInfo = vkinit::semaphore_submit_info(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, getCurrentFrame()._renderSemaphore);
+  VkSemaphoreSubmitInfo waitInfo = vkinit::semaphore_submit_info(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, imageAvailableSemaphore);
+  VkSemaphoreSubmitInfo signalInfo = vkinit::semaphore_submit_info(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, renderFinishedSemaphore);
 
   VkSubmitInfo2 submit = vkinit::submit_info(&cmdinfo, &signalInfo, &waitInfo);
 
@@ -183,7 +183,7 @@ void HeapEngine::draw()
   presentInfo.pSwapchains = &_swapchain;
   presentInfo.swapchainCount = 1;
 
-  presentInfo.pWaitSemaphores = &getCurrentFrame()._renderSemaphore;
+  presentInfo.pWaitSemaphores = &renderFinishedSemaphore;
   presentInfo.waitSemaphoreCount = 1;
 
   presentInfo.pImageIndices = &swapchainImageIndex;
@@ -403,17 +403,23 @@ void HeapEngine::init_sync_structures()
 {
   // create syncronization structures
   // one fence to control when the gpu has finished rendering the frame,
-  // and 2 semaphores to synchronize rendering with swapchain
+  // and one semaphore pair per swapchain image to synchronize rendering/present.
   // we want the fence to start signalled so we can wait on it on the first frame
   VkFenceCreateInfo fenceCreateInfo = vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
   VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::semaphore_create_info();
 
+  const uint32_t imageCount = static_cast<uint32_t>(_swapchainImages.size());
+  _renderFinishedSemaphores.resize(imageCount, VK_NULL_HANDLE);
+
   for (int i = 0; i < FRAME_OVERLAP; i++)
   {
     VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_frames[i]._renderFence));
-
     VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
-    VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
+  }
+
+  for (uint32_t i = 0; i < imageCount; i++)
+  {
+    VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_renderFinishedSemaphores[i]));
   }
 }
 

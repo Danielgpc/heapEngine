@@ -29,11 +29,12 @@ struct DeletionQueue
 // Frame data
 struct frameData
 {
-  VkSemaphore _swapchainSemaphore, _renderSemaphore;
-  VkFence _renderFence;
+  VkSemaphore _swapchainSemaphore = VK_NULL_HANDLE;
+  VkSemaphore _renderSemaphore = VK_NULL_HANDLE;
+  VkFence _renderFence = VK_NULL_HANDLE;
 
-  VkCommandPool _commandPool;
-  VkCommandBuffer _mainCommandBuffer;
+  VkCommandPool _commandPool = VK_NULL_HANDLE;
+  VkCommandBuffer _mainCommandBuffer = VK_NULL_HANDLE;
 
   DeletionQueue _deletionQueue;
 };
@@ -73,6 +74,8 @@ public:
   std::vector<VkImage> _swapchainImages;
   std::vector<VkImageView> _swapchainImageViews;
   VkExtent2D _swapchainExtent;
+
+  std::vector<VkSemaphore> _renderFinishedSemaphores;
 
   DeletionQueue _mainDeletionQueue;
 
