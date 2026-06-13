@@ -7,6 +7,7 @@
 #include "he_initializers.h"
 #include "he_types.h"
 #include "he_images.h"
+#include "he_pipelines.h"
 
 #include <vkbootstrap/VkBootstrap.h>
 
@@ -51,6 +52,10 @@ void HeapEngine::init()
 
   init_sync_structures();
 
+  init_descriptors();
+
+  init_pipelines();
+
   // everything went fine
   _isInitialized = true;
 }
@@ -64,7 +69,7 @@ void HeapEngine::cleanup()
     // make sure the gpu has stopped doing its things
     vkDeviceWaitIdle(_device);
 
-    for (int i = 0; i < FRAME_OVERLAP; i++)
+    for (unsigned int i = 0; i < FRAME_OVERLAP; i++)
     {
       vkDestroyCommandPool(_device, _frames[i]._commandPool, nullptr);
 
@@ -343,7 +348,7 @@ void HeapEngine::init_swapchain()
   VK_CHECK(vkCreateImageView(_device, &rview_info, nullptr, &_drawImage.imageView));
 
   // add to deletion queues
-  _mainDeletionQueue.push_function([=]()
+  _mainDeletionQueue.push_function([this]()
                                    {
 		vkDestroyImageView(_device, _drawImage.imageView, nullptr);
 		vmaDestroyImage(_allocator, _drawImage.image, _drawImage.allocation); });
@@ -376,7 +381,7 @@ void HeapEngine::destroy_swapchain()
   vkDestroySwapchainKHR(_device, _swapchain, nullptr);
 
   // destroy swapchain resources
-  for (int i = 0; i < (int)_swapchainImageViews.size(); i++)
+  for (size_t i = 0; i < _swapchainImageViews.size(); i++)
   {
     vkDestroyImageView(_device, _swapchainImageViews[i], nullptr);
   }
@@ -388,7 +393,7 @@ void HeapEngine::init_commands()
   // we also want the pool to allow for resetting of individual command buffers
   VkCommandPoolCreateInfo commandPoolInfo = vkinit::command_pool_create_info(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
-  for (int i = 0; i < (int)FRAME_OVERLAP; i++)
+  for (unsigned int i = 0; i < FRAME_OVERLAP; i++)
   {
 
     VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));
@@ -411,7 +416,7 @@ void HeapEngine::init_sync_structures()
   const uint32_t imageCount = static_cast<uint32_t>(_swapchainImages.size());
   _renderFinishedSemaphores.resize(imageCount, VK_NULL_HANDLE);
 
-  for (int i = 0; i < FRAME_OVERLAP; i++)
+  for (unsigned int i = 0; i < FRAME_OVERLAP; i++)
   {
     VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_frames[i]._renderFence));
     VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
@@ -425,6 +430,7 @@ void HeapEngine::init_sync_structures()
 
 void HeapEngine::draw_background(VkCommandBuffer cmd)
 {
+  /*
   // make a clear-color from frame number. This will flash with a 120 frame period.
   VkClearColorValue clearValue;
   float flash = std::abs(std::sin(_frameNumber / 120.f));
@@ -434,4 +440,103 @@ void HeapEngine::draw_background(VkCommandBuffer cmd)
 
   // clear image
   vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+  */
+  // bind the gradient drawing compute pipeline
+  vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipeline);
+
+  // bind the descriptor set containing the draw image for the compute pipeline
+  vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
+
+  // execute the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
+  vkCmdDispatch(cmd, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
+}
+
+void HeapEngine::init_descriptors()
+{
+  // create a descriptor pool that will hold 10 sets with 1 image each
+  std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
+      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1},
+  };
+
+  globalDescriptorAllocator.init_pool(_device, 10, sizes);
+
+  // make the descriptor set layout for compute draw
+  {
+    DescriptorLayoutBuilder builder;
+    builder.add_binding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+    _drawImageDescriptorLayout = builder.build(_device, VK_SHADER_STAGE_COMPUTE_BIT);
+  }
+
+  // allocate a descriptor set for our draw image
+  _drawImageDescriptors = globalDescriptorAllocator.allocate(_device, _drawImageDescriptorLayout);
+
+  VkDescriptorImageInfo imgInfo{};
+  imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+  imgInfo.imageView = _drawImage.imageView;
+
+  VkWriteDescriptorSet drawImageWrite = {};
+  drawImageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  drawImageWrite.pNext = nullptr;
+
+  drawImageWrite.dstBinding = 0;
+  drawImageWrite.dstSet = _drawImageDescriptors;
+  drawImageWrite.descriptorCount = 1;
+  drawImageWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+  drawImageWrite.pImageInfo = &imgInfo;
+
+  vkUpdateDescriptorSets(_device, 1, &drawImageWrite, 0, nullptr);
+
+  // make sure both the descriptor allocator and the new layout get cleaned up properly
+  _mainDeletionQueue.push_function([&]()
+                                   {
+		globalDescriptorAllocator.destroy_pool(_device);
+
+		vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr); });
+}
+
+void HeapEngine::init_pipelines()
+{
+  init_background_pipelines();
+}
+
+void HeapEngine::init_background_pipelines()
+{
+  VkPipelineLayoutCreateInfo computeLayout{};
+  computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  computeLayout.pNext = nullptr;
+  computeLayout.pSetLayouts = &_drawImageDescriptorLayout;
+  computeLayout.setLayoutCount = 1;
+
+  VK_CHECK(vkCreatePipelineLayout(_device, &computeLayout, nullptr, &_gradientPipelineLayout));
+
+  // layout code
+  VkShaderModule computeDrawShader;
+  if (!vkutil::load_shader_module("gradient.spv", _device, &computeDrawShader))
+  {
+    vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
+    fmt::print("Error when building the compute shader\n");
+    abort();
+  }
+
+  VkPipelineShaderStageCreateInfo stageinfo{};
+  stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  stageinfo.pNext = nullptr;
+  stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+  stageinfo.module = computeDrawShader;
+  stageinfo.pName = "main";
+
+  VkComputePipelineCreateInfo computePipelineCreateInfo{};
+  computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+  computePipelineCreateInfo.pNext = nullptr;
+  computePipelineCreateInfo.layout = _gradientPipelineLayout;
+  computePipelineCreateInfo.stage = stageinfo;
+
+  VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &_gradientPipeline));
+
+  vkDestroyShaderModule(_device, computeDrawShader, nullptr);
+
+  _mainDeletionQueue.push_function([&]()
+                                   {
+		vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
+		vkDestroyPipeline(_device, _gradientPipeline, nullptr); });
 }

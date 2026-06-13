@@ -34,7 +34,7 @@ $(info Building for platform: $(PLATFORM) ($(UNAME_S)))
 
 # ==================== COMPILER & FLAGS ====================
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2 $(FPIC)
+CXXFLAGS = -std=c++20 -Wall -Wextra -O2 $(FPIC)
 
 # ==================== VULKAN SDK PATH ====================
 VULKAN_SDK ?= $(shell if [ -n "$$VULKAN_SDK" ]; then printf '%s' "$$VULKAN_SDK"; elif [ -d "$(HOME)/VulkanSDK" ]; then ls -d "$(HOME)/VulkanSDK"/* 2>/dev/null | head -n 1; fi)
@@ -104,7 +104,7 @@ GAME_SOURCES = $(wildcard $(GAME_DIR)/*.cpp)
 GAME_OBJECTS = $(patsubst $(GAME_DIR)/%.cpp,$(BIN_DIR)/game_%.o,$(GAME_SOURCES))
 
 # Shader compilation
-GLSLANG = /Users/danielgp/VulkanSDK/1.4.350.0/macOS/bin/glslang
+GLSLANG = glslang
 SHADER_SOURCES = $(wildcard $(SHADERS_DIR)/*.comp)
 COMPILED_SHADERS = $(patsubst $(SHADERS_DIR)/%.comp,$(BIN_DIR)/%.spv,$(SHADER_SOURCES))
 

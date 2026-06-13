@@ -4,6 +4,7 @@
 #pragma once
 
 #include "he_types.h"
+#include "he_descriptors.h"
 
 struct DeletionQueue
 {
@@ -77,6 +78,17 @@ public:
 
   std::vector<VkSemaphore> _renderFinishedSemaphores;
 
+  DescriptorAllocator globalDescriptorAllocator;
+
+  VkDescriptorSet _drawImageDescriptors;
+  VkDescriptorSetLayout _drawImageDescriptorLayout;
+
+  VkPipeline _pipeline;
+  VkPipelineLayout _pipelineLayout;
+
+  VkPipeline _gradientPipeline;
+  VkPipelineLayout _gradientPipelineLayout;
+
   DeletionQueue _mainDeletionQueue;
 
   VmaAllocator _allocator;
@@ -107,4 +119,7 @@ private:
   void create_swapchain(uint32_t width, uint32_t height);
   void destroy_swapchain();
   void draw_background(VkCommandBuffer cmd);
+  void init_descriptors();
+  void init_pipelines();
+  void init_background_pipelines();
 };
