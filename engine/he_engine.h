@@ -6,6 +6,8 @@
 #include "he_types.h"
 #include "he_descriptors.h"
 
+inline constexpr bool bUseValidationLayers = true;
+
 struct DeletionQueue
 {
   std::deque<std::function<void()>> deletors;
