@@ -13,6 +13,7 @@
 
 HeapEngine *loadedEngine = nullptr;
 
+// Returns the globally loaded engine instance.
 HeapEngine &HeapEngine::Get() { return *loadedEngine; }
 
 void HeapEngine::init()
@@ -32,12 +33,14 @@ void HeapEngine::init()
                              "Heap Engine", nullptr, nullptr);
   assert(_window != nullptr && "Failed to create GLFW window");
 
+  // Initialize all Vulkan and rendering subsystems before starting the main loop.
   init_vulkan();
   init_swapchain();
   init_commands();
   init_sync_structures();
   init_descriptors();
   init_pipelines();
+  init_imgui();
 
   _isInitialized = true;
 }
@@ -50,6 +53,7 @@ void HeapEngine::cleanup()
     return;
   }
 
+  // Wait for the GPU to finish work before destroying resources.
   vkDeviceWaitIdle(_device);
 
   for (unsigned int i = 0; i < FRAME_OVERLAP; i++)
@@ -84,6 +88,7 @@ void HeapEngine::cleanup()
 
 void HeapEngine::draw()
 {
+  // Synchronize with the GPU and reuse per-frame resources before rendering the next frame.
   VK_CHECK(vkWaitForFences(_device, 1, &getCurrentFrame()._renderFence, true, 1000000000));
   getCurrentFrame()._deletionQueue.flush();
   VK_CHECK(vkResetFences(_device, 1, &getCurrentFrame()._renderFence));
@@ -108,10 +113,20 @@ void HeapEngine::draw()
   vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
   draw_background(cmd);
 
-  vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+  // execute a copy from the draw image into the swapchain
   vkutil::copy_image_to_image(cmd, _drawImage.image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
-  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+  // set swapchain image layout to Attachment Optimal so we can draw it
+  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+  // draw imgui into the swapchain image
+  draw_imgui(cmd, _swapchainImageViews[swapchainImageIndex]);
+
+  // set swapchain image layout to Present so we can draw it
+  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+
+  // finalize the command buffer (we can no longer add commands, but it can now be executed)
+  VK_CHECK(vkEndCommandBuffer(cmd));
 
   VK_CHECK(vkEndCommandBuffer(cmd));
 
@@ -139,6 +154,7 @@ void HeapEngine::run()
 {
   bool bQuit = false;
 
+  // Main application loop: process window events and render frames until exit.
   while (!bQuit && _window)
   {
     glfwPollEvents();
@@ -163,6 +179,16 @@ void HeapEngine::run()
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
       continue;
     }
+
+    // Imgui new frame
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    // Test ImGui UI
+    ImGui::ShowDemoWindow();
+
+    ImGui::Render();
 
     draw();
   }

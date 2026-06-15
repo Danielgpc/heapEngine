@@ -6,7 +6,8 @@ bool vkutil::load_shader_module(const char *filePath,
                                 VkDevice device,
                                 VkShaderModule *outShaderModule)
 {
-  // try the provided path first, then try bin/<filename> if needed
+  // Load SPIR-V shader code from disk and create a Vulkan shader module.
+  // Accept both the raw path and a fallback under bin/ for deployed shaders.
   std::string shaderPath = filePath;
   std::ifstream file(shaderPath, std::ios::ate | std::ios::binary);
 

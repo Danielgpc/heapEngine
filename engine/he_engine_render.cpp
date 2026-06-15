@@ -5,6 +5,7 @@
 
 void HeapEngine::draw_background(VkCommandBuffer cmd)
 {
+  // Bind the compute pipeline and descriptor set that generate the background image.
   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipeline);
   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
 
@@ -13,6 +14,7 @@ void HeapEngine::draw_background(VkCommandBuffer cmd)
 
 void HeapEngine::init_descriptors()
 {
+  // Create descriptors used by the compute background shader.
   std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1}};
   globalDescriptorAllocator.init_pool(_device, 10, sizes);
 
@@ -44,6 +46,7 @@ void HeapEngine::init_descriptors()
 
 void HeapEngine::init_pipelines()
 {
+  // Initialize all rendering pipelines required by the engine.
   init_background_pipelines();
 }
 
@@ -53,6 +56,8 @@ void HeapEngine::init_background_pipelines()
   computeLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   computeLayout.pSetLayouts = &_drawImageDescriptorLayout;
   computeLayout.setLayoutCount = 1;
+
+  // Build the compute pipeline layout and create the gradient compute pipeline.
 
   VK_CHECK(vkCreatePipelineLayout(_device, &computeLayout, nullptr, &_gradientPipelineLayout));
 

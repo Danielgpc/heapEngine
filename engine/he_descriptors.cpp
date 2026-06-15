@@ -3,6 +3,7 @@
 //> descriptor_bind
 void DescriptorLayoutBuilder::add_binding(uint32_t binding, VkDescriptorType type)
 {
+  // Add a descriptor binding definition that can later be compiled into a layout.
   VkDescriptorSetLayoutBinding newbind{};
   newbind.binding = binding;
   newbind.descriptorCount = 1;
@@ -13,6 +14,7 @@ void DescriptorLayoutBuilder::add_binding(uint32_t binding, VkDescriptorType typ
 
 void DescriptorLayoutBuilder::clear()
 {
+  // Reset the builder state so a new descriptor layout can be created.
   bindings.clear();
 }
 //< descriptor_bind
@@ -41,6 +43,7 @@ VkDescriptorSetLayout DescriptorLayoutBuilder::build(VkDevice device, VkShaderSt
 
 void DescriptorAllocator::init_pool(VkDevice device, uint32_t maxSets, std::span<PoolSizeRatio> poolRatios)
 {
+  // Create a descriptor pool sized to hold the requested number of descriptor sets.
   std::vector<VkDescriptorPoolSize> poolSizes;
   for (PoolSizeRatio ratio : poolRatios)
   {
@@ -60,16 +63,19 @@ void DescriptorAllocator::init_pool(VkDevice device, uint32_t maxSets, std::span
 
 void DescriptorAllocator::clear_descriptors(VkDevice device)
 {
+  // Reset the descriptor pool to reuse its descriptor sets for the next frame.
   vkResetDescriptorPool(device, pool, 0);
 }
 
 void DescriptorAllocator::destroy_pool(VkDevice device)
 {
+  // Release the Vulkan descriptor pool and all associated descriptor set storage.
   vkDestroyDescriptorPool(device, pool, nullptr);
 }
 
 VkDescriptorSet DescriptorAllocator::allocate(VkDevice device, VkDescriptorSetLayout layout)
 {
+  // Allocate one descriptor set from the global descriptor pool.
   VkDescriptorSetAllocateInfo allocInfo = {.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
   allocInfo.pNext = nullptr;
   allocInfo.descriptorPool = pool;

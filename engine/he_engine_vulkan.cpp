@@ -1,5 +1,6 @@
 #include "he_engine.h"
 
+// Vulkan initialization and helper implementations for the engine.
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -77,6 +78,7 @@ void HeapEngine::init_vulkan()
 
 void HeapEngine::init_swapchain()
 {
+  // Create the swapchain and the offscreen draw image used for compute-based rendering.
   create_swapchain(_windowExtent.width, _windowExtent.height);
 
   VkExtent3D drawImageExtent = {
@@ -113,6 +115,7 @@ void HeapEngine::init_swapchain()
 
 void HeapEngine::create_swapchain(uint32_t width, uint32_t height)
 {
+  // Build a swapchain configured for the window surface and match the desired format.
   vkb::SwapchainBuilder swapchainBuilder{_chosenGPU, _device, _surface};
 
   _swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
@@ -143,19 +146,36 @@ void HeapEngine::destroy_swapchain()
 
 void HeapEngine::init_commands()
 {
+  // Allocate command pools and command buffers for the frame loop and immediate submit path.
   VkCommandPoolCreateInfo commandPoolInfo = vkinit::command_pool_create_info(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
   for (unsigned int i = 0; i < FRAME_OVERLAP; i++)
   {
     VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));
 
+    // Allocate the default command buffer that we use for rendering
     VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_frames[i]._commandPool, 1);
     VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_frames[i]._mainCommandBuffer));
   }
+
+  //> imm_cmd
+  VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_immCmdPool));
+
+  // Allocate the command buffer with use for immediate submits
+  VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::command_buffer_allocate_info(_immCmdPool, 1);
+  VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_immCmdBuffer));
+
+  _mainDeletionQueue.push_function([=]()
+                                   { vkDestroyCommandPool(_device, _immCmdPool, nullptr); });
+
+  //< imm_cmd
 }
 
 void HeapEngine::init_sync_structures()
 {
+  // Create synchronization primitives used during frame submission and presentation.
+  // Each frame gets its own fence and a swapchain-ready semaphore, while the swapchain
+  // uses one semaphore per image to know when the frame is finished.
   VkFenceCreateInfo fenceCreateInfo = vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
   VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::semaphore_create_info();
 
@@ -172,4 +192,34 @@ void HeapEngine::init_sync_structures()
   {
     VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_renderFinishedSemaphores[i]));
   }
+
+  VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immFence));
+  _mainDeletionQueue.push_function([=]()
+                                   { vkDestroyFence(_device, _immFence, nullptr); });
+}
+
+void HeapEngine::immidiate_submit(std::function<void(VkCommandBuffer cmd)> &&function)
+{
+  // Submit a single command buffer immediately and wait for completion.
+  // This helper is useful for one-time GPU work, such as resource transitions or uploads.
+  VK_CHECK(vkResetFences(_device, 1, &_immFence));
+  VK_CHECK(vkResetCommandBuffer(_immCmdBuffer, 0));
+
+  VkCommandBuffer cmd = _immCmdBuffer;
+
+  VkCommandBufferBeginInfo cmdBeginInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+  VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+
+  function(cmd);
+
+  VK_CHECK(vkEndCommandBuffer(cmd));
+
+  VkCommandBufferSubmitInfo cmdinfo = vkinit::command_buffer_submit_info(cmd);
+  VkSubmitInfo2 submit = vkinit::submit_info(&cmdinfo, nullptr, nullptr);
+
+  // submit command buffer to the queue and execute it.
+  //  _renderFence will now block until the graphic commands finish execution
+  VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immFence));
+
+  VK_CHECK(vkWaitForFences(_device, 1, &_immFence, true, 9999999999));
 }

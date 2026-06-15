@@ -4,6 +4,7 @@
 
 void vkutil::transition_image(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout)
 {
+  // Transition an image between layouts using the newer Vulkan 1.3 barrier API.
   VkImageMemoryBarrier2 imageBarrier{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
   imageBarrier.pNext = nullptr;
 
@@ -31,6 +32,7 @@ void vkutil::transition_image(VkCommandBuffer cmd, VkImage image, VkImageLayout 
 
 void vkutil::copy_image_to_image(VkCommandBuffer cmd, VkImage source, VkImage destination, VkExtent2D srcSize, VkExtent2D dstSize)
 {
+  // Copy or scale image data from the source to the destination image using a blit operation.
   VkImageBlit2 blitRegion{.sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr};
 
   blitRegion.srcOffsets[1].x = srcSize.width;

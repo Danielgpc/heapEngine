@@ -94,7 +94,15 @@ SHADERS_DIR = shaders
 # Engine source
 ENGINE_LIB = $(LIB_DIR)/libheap_engine$(LIB_EXT)
 ENGINE_SOURCES = $(wildcard $(ENGINE_DIR)/*.cpp)
-ENGINE_THIRD_PARTY_SOURCES = third_party/vkbootstrap/VkBootstrap.cpp
+ENGINE_THIRD_PARTY_SOURCES = \
+    third_party/vkbootstrap/VkBootstrap.cpp \
+    third_party/imgui/imgui.cpp \
+    third_party/imgui/imgui_draw.cpp \
+    third_party/imgui/imgui_widgets.cpp \
+    third_party/imgui/imgui_tables.cpp \
+    third_party/imgui/imgui_demo.cpp \
+    third_party/imgui/imgui_impl_vulkan.cpp \
+    third_party/imgui/imgui_impl_glfw.cpp
 ENGINE_THIRD_PARTY_OBJECTS = $(patsubst %.cpp,$(BIN_DIR)/engine_%.o,$(ENGINE_THIRD_PARTY_SOURCES))
 ENGINE_OBJECTS = $(patsubst $(ENGINE_DIR)/%.cpp,$(BIN_DIR)/engine_%.o,$(ENGINE_SOURCES)) $(ENGINE_THIRD_PARTY_OBJECTS)
 

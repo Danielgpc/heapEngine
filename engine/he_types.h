@@ -15,6 +15,10 @@
 #include <vulkan/vk_enum_string_helper.h>
 #include <vma/vk_mem_alloc.h>
 
+#include <imgui/imgui.h>
+#include <imgui/imgui_impl_vulkan.h>
+#include <imgui/imgui_impl_glfw.h>
+
 #define FMT_HEADER_ONLY
 #include <fmt/core.h>
 

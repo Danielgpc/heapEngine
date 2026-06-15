@@ -19,7 +19,8 @@ struct DeletionQueue
 
   void flush()
   {
-    // reverse iterate the deletion queue to execute all the functions
+    // Reverse iterate the deletion queue to ensure resources are destroyed in
+    // opposite order from creation, matching Vulkan dependency expectations.
     for (auto it = deletors.rbegin(); it != deletors.rend(); it++)
     {
       (*it)(); // call functors
@@ -91,6 +92,11 @@ public:
   VkPipeline _gradientPipeline;
   VkPipelineLayout _gradientPipelineLayout;
 
+  // Immediate submit structures
+  VkFence _immFence;
+  VkCommandBuffer _immCmdBuffer;
+  VkCommandPool _immCmdPool;
+
   DeletionQueue _mainDeletionQueue;
 
   VmaAllocator _allocator;
@@ -100,6 +106,10 @@ public:
   VkExtent2D _drawExtent;
 
   static HeapEngine &Get();
+
+  void immidiate_submit(std::function<void(VkCommandBuffer cmd)> &&function);
+
+  void draw_imgui(VkCommandBuffer cmd, VkImageView targetImageView);
 
   // initializes everything in the engine
   void init();
@@ -124,4 +134,5 @@ private:
   void init_descriptors();
   void init_pipelines();
   void init_background_pipelines();
+  void init_imgui();
 };
