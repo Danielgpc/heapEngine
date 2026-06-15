@@ -113,6 +113,10 @@ void HeapEngine::draw()
   vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
   draw_background(cmd);
 
+  // transition images into layouts required for the blit/copy operation
+  vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+  vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
   // execute a copy from the draw image into the swapchain
   vkutil::copy_image_to_image(cmd, _drawImage.image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
 
@@ -126,8 +130,6 @@ void HeapEngine::draw()
   vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
   // finalize the command buffer (we can no longer add commands, but it can now be executed)
-  VK_CHECK(vkEndCommandBuffer(cmd));
-
   VK_CHECK(vkEndCommandBuffer(cmd));
 
   VkCommandBufferSubmitInfo cmdinfo = vkinit::command_buffer_submit_info(cmd);
