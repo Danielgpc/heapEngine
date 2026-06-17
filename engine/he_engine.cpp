@@ -187,8 +187,21 @@ void HeapEngine::run()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    // Test ImGui UI
-    ImGui::ShowDemoWindow();
+    if (ImGui::Begin("background"))
+    {
+
+      ComputeEffect &selected = backgroundEffects[currentBackgroundEffect];
+
+      ImGui::Text("Selected effect: ", selected.name);
+
+      ImGui::SliderInt("Effect Index", &currentBackgroundEffect, 0, backgroundEffects.size() - 1);
+
+      ImGui::InputFloat4("data1", (float *)&selected.data.data1);
+      ImGui::InputFloat4("data2", (float *)&selected.data.data2);
+      ImGui::InputFloat4("data3", (float *)&selected.data.data3);
+      ImGui::InputFloat4("data4", (float *)&selected.data.data4);
+    }
+    ImGui::End();
 
     ImGui::Render();
 

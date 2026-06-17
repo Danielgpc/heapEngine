@@ -30,6 +30,24 @@ struct DeletionQueue
   }
 };
 
+struct ComputePushConstants
+{
+  glm::vec4 data1;
+  glm::vec4 data2;
+  glm::vec4 data3;
+  glm::vec4 data4;
+};
+
+struct ComputeEffect
+{
+  const char *name;
+
+  VkPipeline pipeline;
+  VkPipelineLayout layout;
+
+  ComputePushConstants data;
+};
+
 // Frame data
 struct frameData
 {
@@ -105,6 +123,9 @@ public:
   AllocatedImage _drawImage;
   VkExtent2D _drawExtent;
 
+  std::vector<ComputeEffect> backgroundEffects;
+  int currentBackgroundEffect{0};
+
   static HeapEngine &Get();
 
   void immidiate_submit(std::function<void(VkCommandBuffer cmd)> &&function);
@@ -133,6 +154,5 @@ private:
   void draw_background(VkCommandBuffer cmd);
   void init_descriptors();
   void init_pipelines();
-  void init_background_pipelines();
   void init_imgui();
 };
